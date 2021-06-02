@@ -242,6 +242,11 @@ def transform_proposals(dataset_dict, image_shape, transforms, *, proposal_topk,
         )
 
         boxes.clip(image_shape)
+
+        keep = boxes.unique_boxes()
+        boxes = boxes[keep]
+        objectness_logits = objectness_logits[keep]
+
         keep = boxes.nonempty(threshold=min_box_size)
         boxes = boxes[keep]
         objectness_logits = objectness_logits[keep]
@@ -587,6 +592,12 @@ def build_augmentation(cfg, is_train):
                 vertical=cfg.INPUT.RANDOM_FLIP == "vertical",
             )
         )
+
+    if is_train:
+        augmentation.append(T.RandomBrightness(1.0 / 1.5, 1.5))
+        augmentation.append(T.RandomSaturation(1.0 / 1.5, 1.5))
+        # tfm_gens.append(T.RandomLighting(1.0))
+
     return augmentation
 
 

@@ -1,0 +1,40 @@
+_BASE_: "../PascalVOC-Detection/oicr_WSR_18_DC5_1x.yaml"
+WSL:
+  REFINE_NUM: 4
+  REFINE_REG: [True, True, True, True]
+  PS_ON: True
+  SP_ON: True
+  MASK_MINED_TOP_K: 10
+MODEL:
+  META_ARCHITECTURE: "GeneralizedMCNNWSL"
+  MASK_ON: True
+  SEM_SEG_HEAD:
+    IN_FEATURES: ["res5",]
+  ROI_HEADS:
+    NAME: "JTSMROIHeads"
+    NUM_CLASSES: 80
+  ROI_BOX_HEAD:
+    POOLER_TYPE: "MOIPool"
+  ROI_MASK_HEAD:
+    NAME: "MaskRCNNConvUpsampleWSLHead"
+  BACKBONE:
+    NAME: "build_wsl_resnet_backbone"
+    FREEZE_AT: 5
+SOLVER:
+  STEPS: (140000, 200000)
+  MAX_ITER: 240000  # 10.0 epochs
+  IMS_PER_BATCH: 4
+  BASE_LR: 0.01
+TEST:
+  EVAL_PERIOD: 1000
+  DETECTIONS_PER_IMAGE: 100
+  AUG:
+    ENABLED: True
+DATASETS:
+  TRAIN: ('coco_2017_train_panoptic_separated',)
+  PROPOSAL_FILES_TRAIN: ('datasets/proposals/mcg_coco_instance_segmentation_d2',)
+  PRECOMPUTED_PROPOSAL_TOPK_TRAIN: 4000
+  TEST: ('coco_2017_val_panoptic_separated',)
+  PROPOSAL_FILES_TEST: ('datasets/proposals/mcg_coco_instance_segmentation_d2', )
+  PRECOMPUTED_PROPOSAL_TOPK_TEST: 4000
+VIS_PERIOD: 32

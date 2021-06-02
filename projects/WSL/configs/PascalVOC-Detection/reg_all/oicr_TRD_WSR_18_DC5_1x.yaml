@@ -1,0 +1,15 @@
+_BASE_: "../oicr_WSR_18_DC5_1x.yaml"
+MODEL:
+  BACKBONE:
+    NAME: "build_mrrp_wsl_resnet_backbone"
+    FREEZE_AT: 5
+  ROI_HEADS:
+    NAME: "TridentOICRROIHeads"
+  MRRP:
+    NUM_BRANCH: 3
+    BRANCH_DILATIONS: [1, 2, 3]
+    TEST_BRANCH_IDX: -1
+    MRRP_STAGE: "res5"
+WSL:
+  REFINE_NUM: 4
+  REFINE_REG: [True, True, True, True]
