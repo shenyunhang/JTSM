@@ -4,7 +4,6 @@ WSL:
   REFINE_REG: [True, True, True, True]
   PS_ON: True
   SP_ON: True
-  MASK_MINED_TOP_K: 5
 MODEL:
   META_ARCHITECTURE: "GeneralizedMCNNWSL"
   MASK_ON: True
@@ -18,8 +17,10 @@ MODEL:
     POOLER_TYPE: "MOIPool"
   ROI_MASK_HEAD:
     NAME: "MaskRCNNConvUpsampleWSLHead"
+    #NAME: "MaskRCNNConvUpsampleHead"
   BACKBONE:
-    NAME: "build_wsl_resnet_backbone"
+    #NAME: "build_wsl_resnet_backbone"
+    NAME: "build_wsl_resnet_v2_backbone"
     FREEZE_AT: 5
 SOLVER:
   STEPS: (35000, 50000)
@@ -39,5 +40,5 @@ DATASETS:
   #TEST: ('voc_2012_val_instance',)
   TEST: ('voc_2012_val_panoptic_separated',)
   PROPOSAL_FILES_TEST: ('datasets/proposals/mcg_voc_2012_val_instance_segmentation_d2', )
-  PRECOMPUTED_PROPOSAL_TOPK_TRAIN: 4000
+  PRECOMPUTED_PROPOSAL_TOPK_TEST: 4000
 VIS_PERIOD: 32
