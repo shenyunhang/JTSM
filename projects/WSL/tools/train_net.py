@@ -103,6 +103,7 @@ class Trainer(DefaultTrainer):
             self.optimizer.zero_grad()
 
         losses = losses / self.iter_size
+        losses_cpu = losses.cpu().detach().numpy()
         losses.backward()
 
         self._trainer._write_metrics(loss_dict, data_time)
@@ -117,9 +118,9 @@ class Trainer(DefaultTrainer):
 
             self.optimizer.zero_grad()
 
-        del losses
-        del loss_dict
-        torch.cuda.empty_cache()
+        # del losses
+        # del loss_dict
+        # torch.cuda.empty_cache()
 
     @classmethod
     def build_train_loader(cls, cfg):

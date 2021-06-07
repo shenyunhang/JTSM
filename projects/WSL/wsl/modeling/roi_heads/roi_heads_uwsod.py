@@ -22,7 +22,6 @@ from detectron2.structures import Boxes, ImageList, Instances, pairwise_iou
 from detectron2.utils.events import get_event_storage
 
 from wsl.layers import ROILabel
-from wsl.modeling.cls_heads import TwoLayerMLP
 from wsl.modeling.poolers import ROIPooler
 from wsl.modeling.roi_heads.fast_rcnn_oicr import OICROutputLayers
 from wsl.modeling.roi_heads.fast_rcnn_wsddn import WSDDNOutputLayers
@@ -83,8 +82,6 @@ class UWSODROIHeads(ROIHeads):
         pooler_type: str = "ROIPool",
         roi_label: Optional[nn.Module] = None,
         rpn_on: bool = False,
-        cls_head: nn.Module = None,
-        cpg_strides: Tuple[int] = None,
         **kwargs
     ):
         """
@@ -158,8 +155,6 @@ class UWSODROIHeads(ROIHeads):
         self.pooler_type = pooler_type
 
         self.rpn_on = rpn_on
-        self.cls_head = cls_head
-        self.cpg_strides = cpg_strides
 
     @classmethod
     def from_config(cls, cfg, input_shape):
@@ -176,32 +171,7 @@ class UWSODROIHeads(ROIHeads):
             ret.update(cls._init_mask_head(cfg, input_shape))
         if inspect.ismethod(cls._init_keypoint_head):
             ret.update(cls._init_keypoint_head(cfg, input_shape))
-        ret.update(cls._init_cls_head(cfg, input_shape))
         return ret
-
-    @classmethod
-    def _init_cls_head(cls, cfg, input_shape):
-        # return {}
-        # fmt: off
-        in_features = cfg.MODEL.ROI_HEADS.IN_FEATURES
-        cpg_strides  = tuple(input_shape[k].stride for k in in_features)
-        # fmt: on
-
-        mrrp_on = cfg.MODEL.MRRP.MRRP_ON
-        mrrp_num_branch = cfg.MODEL.MRRP.NUM_BRANCH
-        if mrrp_on:
-            cpg_strides = tuple(input_shape[k].stride for k in in_features * mrrp_num_branch)
-
-        # If StandardROIHeads is applied on multiple feature maps (as in FPN),
-        # then we share the same predictors and therefore the channel counts must be the same
-        in_channels = [input_shape[f].channels for f in in_features]
-        # Check all channel counts are equal
-        assert len(set(in_channels)) == 1, in_channels
-        in_channels = in_channels[0]
-
-        cls_head = TwoLayerMLP(cfg, ShapeSpec(channels=in_channels))
-
-        return {"cls_head": cls_head, "cpg_strides": cpg_strides}
 
     @classmethod
     def _init_box_head(cls, cfg, input_shape):
@@ -404,20 +374,6 @@ class UWSODROIHeads(ROIHeads):
             proposals = self.label_and_sample_proposals(proposals, targets)
             self._vis_proposal(proposals, prefix="train", suffix="_proposals")
 
-        if self.rpn_on:
-            if self.cls_head:
-                cpgs = self.cls_head(features, self.gt_classes_img_oh, self.images)
-                self._vis_mask(cpgs, "lmap", "_lmap")
-
-                # self.iter = self.iter + 1
-                # if self.iter_test > 0:
-                    # self.epoch_test = self.epoch_test + 1
-                # self.iter_test = 0
-
-                # return None, self.cls_head.loss()
-            else:
-                cpgs = None
-
         del targets
 
         if self.training:
@@ -551,6 +507,9 @@ class UWSODROIHeads(ROIHeads):
                 prefix="train",
                 suffix="_mil",
             )
+
+            all_targets = [[] for _ in proposals]
+            predictions_K = []
             for k in range(self.refine_K):
                 suffix = "_r" + str(k)
                 term_weight = 1
@@ -567,6 +526,8 @@ class UWSODROIHeads(ROIHeads):
                     targets = self.get_pgt_top_k(
                         prev_pred_boxes, prev_pred_scores, proposals, suffix=suffix
                     )
+                for j in range(len(targets)):
+                    all_targets[j].append(targets[j])
 
                 if self.sampling_on:
                     proposals_k = self.label_and_sample_proposals_wsl(
@@ -601,6 +562,7 @@ class UWSODROIHeads(ROIHeads):
                         p.gt_weights = rw.to(torch.float32)
 
                 predictions_k = self.box_refinery[k](box_features)
+                predictions_K.append(predictions_k)
 
                 losses_k = self.box_refinery[k].losses(predictions_k, proposals_k)
                 for loss_name in losses_k.keys():
@@ -625,23 +587,62 @@ class UWSODROIHeads(ROIHeads):
                 losses.update(losses_k)
 
             if self.rpn_on:
-                if self.cls_head:
-                    losses_cls_img = self.cls_head.loss()
-                    losses.update(losses_cls_img)
-
-                # ==========================================================================
-
                 if self.refine_mist and False:
-                    self.proposal_targets = self.get_pgt_mist(
+                    targets = self.get_pgt_mist(
                         prev_pred_boxes, prev_pred_scores, proposals, suffix="_rpn"
                     )
                 else:
-                    # self.proposal_targets = self.get_pgt(
+                    # targets = self.get_pgt(
                     # prev_pred_boxes, prev_pred_scores, proposals, "_rpn"
                     # )
-                    self.proposal_targets = self.get_pgt_top_k(
+                    targets = self.get_pgt_top_k(
                         prev_pred_boxes, prev_pred_scores, proposals, suffix="_rpn"
                     )
+                self.proposal_targets = targets
+
+            if self.rpn_on and False:
+                if self.refine_mist and False:
+                    targets = self.get_pgt_mist(
+                        prev_pred_boxes, prev_pred_scores, proposals, suffix="_rpn"
+                    )
+                else:
+                    # targets = self.get_pgt(
+                    # prev_pred_boxes, prev_pred_scores, proposals, "_rpn"
+                    # )
+                    targets = self.get_pgt_top_k(
+                        prev_pred_boxes, prev_pred_scores, proposals, suffix="_rpn"
+                    )
+                for j in range(len(targets)):
+                    all_targets[j].append(targets[j])
+                # print(all_targets)
+                # print(targets for targets in all_targets)
+                # print(type(targets) for targets in all_targets)
+
+                self.proposal_targets = [Instances.cat(all_target) for all_target in all_targets]
+
+
+            if self.rpn_on and False:
+                prev_pred_scores = self.box_refinery[-1].predict_probs_K(predictions_K, proposals)
+                prev_pred_boxes = self.box_refinery[-1].predict_boxes_K(predictions_K, proposals)
+                prev_pred_scores = [
+                    prev_pred_score.detach() for prev_pred_score in prev_pred_scores
+                ]
+                prev_pred_boxes = [prev_pred_box.detach() for prev_pred_box in prev_pred_boxes]
+
+                if self.refine_mist and False:
+                    targets = self.get_pgt_mist(
+                        prev_pred_boxes, prev_pred_scores, proposals, suffix="_rpn"
+                    )
+                else:
+                    # targets = self.get_pgt(
+                    # prev_pred_boxes, prev_pred_scores, proposals, "_rpn"
+                    # )
+                    targets = self.get_pgt_top_k(
+                        prev_pred_boxes, prev_pred_scores, proposals, suffix="_rpn"
+                    )
+
+                self.proposal_targets = targets
+
 
             # proposals is modified in-place below, so losses must be computed first.
             if self.train_on_pred_boxes:
@@ -1174,67 +1175,6 @@ class UWSODROIHeads(ROIHeads):
             vis_name = prefix + "_g" + str(device_index) + "_b" + str(b) + suffix
             storage.put_image(vis_name, img_pgt)
 
-    @torch.no_grad()
-    def _vis_mask(self, masks, prefix, suffix):
-        if masks is None:
-            return
-        if self.vis_period <= 0 or self.iter % self.vis_period > 0:
-            return
-        storage = get_event_storage()
-
-        output_dir = os.path.join(self.output_dir, prefix)
-        if self.iter == 0:
-            Path(output_dir).mkdir(parents=True, exist_ok=True)
-
-        device_index = masks.device.index
-
-        img = self.images[0].clone().detach().cpu().numpy()
-        channel_swap = (1, 2, 0)
-        img = img.transpose(channel_swap)
-        pixel_means = [103.939, 116.779, 123.68]
-        img += pixel_means
-        img = img.astype(np.uint8)
-
-        mask = masks[0, ...].clone().detach().cpu().numpy()
-        max_value = np.max(mask)
-        if max_value > 0:
-            max_value = max_value * 0.1
-            mask = np.clip(mask, 0, max_value)
-            mask = mask / max_value * 255
-        mask = mask.astype(np.uint8)
-
-        img = cv2.resize(img, (mask.shape[1], mask.shape[0]))
-        img_color = cv2.applyColorMap(mask, cv2.COLORMAP_JET)
-        img_blend = cv2.addWeighted(img, 0.5, img_color, 0.5, 0.0)
-
-        save_name = (
-            "iter" + str(self.iter) + "_g" + str(device_index) + "_b" + str(0) + suffix + "_img.png"
-        )
-        save_path = os.path.join(output_dir, save_name)
-        cv2.imwrite(save_path, img)
-
-        save_name = (
-            "iter" + str(self.iter) + "_g" + str(device_index) + "_b" + str(0) + suffix + "_jet.png"
-        )
-        save_path = os.path.join(output_dir, save_name)
-        cv2.imwrite(save_path, img_color)
-
-        save_name = (
-            "iter" + str(self.iter) + "_g" + str(device_index) + "_b" + str(0) + suffix + "_blend.png"
-        )
-        save_path = os.path.join(output_dir, save_name)
-        cv2.imwrite(save_path, img_blend)
-
-        img_color = cv2.cvtColor(img_color, cv2.COLOR_BGR2RGB)
-        img_color = img_color.transpose(2, 0, 1)
-        vis_name = prefix + "_g" + str(device_index) + "_b" + str(0) + suffix
-        storage.put_image(vis_name, img_color)
-
-        img_blend = cv2.cvtColor(img_blend, cv2.COLOR_BGR2RGB)
-        img_blend = img_blend.transpose(2, 0, 1)
-        vis_name = prefix + "_g" + str(device_index) + "_b" + str(0) + suffix + "blend"
-        storage.put_image(vis_name, img_blend)
-
     def _sample_proposals_wsl(
         self, k, matched_idxs: torch.Tensor, matched_labels: torch.Tensor, gt_classes: torch.Tensor
     ) -> Tuple[torch.Tensor, torch.Tensor]:
@@ -1346,7 +1286,6 @@ class UWSODROIHeads(ROIHeads):
             )
 
             # Set target attributes of the sampled proposals:
-            # print("label_and_sample_proposals", len(proposals_per_image), proposals_per_image, len(sampled_idxs), sampled_idxs)
             proposals_per_image = proposals_per_image[sampled_idxs]
             proposals_per_image.gt_classes = gt_classes
 
@@ -1468,15 +1407,15 @@ class UWSODROIHeads(ROIHeads):
                 proposals_per_image.gt_weights = targets_per_image.gt_weights[
                     matched_idxs[sampled_idxs]
                 ]
-            if has_gt and targets_per_image.has("gt_masks") and not self.cls_agnostic_bbox_known:
+            if has_gt and targets_per_image.has("gt_masks"):
                 proposals_per_image.gt_masks = targets_per_image.gt_masks[
                     matched_idxs[sampled_idxs]
                 ]
 
-            # We index all the attributes of targets that start with "gt_"
-            # and have not been added to proposals yet (="gt_classes").
             if has_gt:
                 sampled_targets = matched_idxs[sampled_idxs]
+                # We index all the attributes of targets that start with "gt_"
+                # and have not been added to proposals yet (="gt_classes").
                 # NOTE: here the indexing waste some compute, because heads
                 # like masks, keypoints, etc, will filter the proposals again,
                 # (by foreground/background, or number of keypoints in the image, etc)

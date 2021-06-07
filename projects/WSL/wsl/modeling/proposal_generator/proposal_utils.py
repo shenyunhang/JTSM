@@ -7,6 +7,9 @@ import torch
 from detectron2.layers import batched_nms, cat
 from detectron2.structures import Boxes, Instances
 from detectron2.utils.events import get_event_storage
+from detectron2.modeling.poolers import convert_boxes_to_pooler_format
+
+from wsl.layers import csc
 
 logger = logging.getLogger(__name__)
 
@@ -163,9 +166,8 @@ def find_top_rpn_proposals_group(
     """
     num_images = len(image_sizes)
     device = proposals[0].device
-    num_preprepre_nms = 0
-    num_prepre_nms = 0
-    num_pre_nms = 0
+
+    num_pre_nms = [0, 0, 0, 0]
     num_post_nms = 0
 
     # 1. Select top-k anchor for every level and every image
@@ -178,7 +180,7 @@ def find_top_rpn_proposals_group(
         Hi_Wi = int(Hi_Wi_A / num_anchors[level_id])
         logits_i = logits_i.view(-1, Hi_Wi, num_anchors[level_id])
         proposals_i = proposals_i.view(-1, Hi_Wi, num_anchors[level_id], 4)
-        num_preprepre_nms += Hi_Wi_A
+        num_pre_nms[0] += Hi_Wi_A
         for anchor_id in range(num_anchors[level_id]):
             num_proposals_i_a = min(pre_nms_topk, Hi_Wi)
 
@@ -224,37 +226,7 @@ def find_top_rpn_proposals_group(
         scores_per_img = topk_scores[n]
         lvl = level_ids
 
-        num_prepre_nms += len(boxes)
-
-        if isinstance(cpgs, torch.Tensor):
-            cpg = cpgs[n] > 0.1
-            cpg = torch.nonzero(cpg, as_tuple=False)
-            # print(cpg)
-            valid_masks = None
-            for i in range(cpg.size(0)):
-                # y = cpg[i, 0] * cpg_strides[0]
-                # x = cpg[i, 1] * cpg_strides[0]
-                y = cpg[i, 0]
-                x = cpg[i, 1]
-
-                valid_mask = (
-                    (boxes.tensor[:, 0] < x)
-                    & (boxes.tensor[:, 1] < y)
-                    & (boxes.tensor[:, 2] > x)
-                    & (boxes.tensor[:, 3] > y)
-                )
-                if valid_masks is not None:
-                    valid_masks = valid_masks | valid_mask
-                else:
-                    valid_masks = valid_mask
-            # print(torch.sum(valid_masks))
-
-            if valid_masks is not None:
-                boxes = boxes[valid_masks]
-                scores_per_img = scores_per_img[valid_masks]
-                lvl = lvl[valid_masks]
-
-        # print("find_top_rpn_proposals_group", len(boxes))
+        num_pre_nms[1] += len(boxes)
 
         valid_mask = torch.isfinite(boxes.tensor).all(dim=1) & torch.isfinite(scores_per_img)
         if not valid_mask.all():
@@ -272,7 +244,71 @@ def find_top_rpn_proposals_group(
         if keep.sum().item() != len(boxes):
             boxes, scores_per_img, lvl = boxes[keep], scores_per_img[keep], lvl[keep]
 
-        num_pre_nms += keep.sum().item()
+        num_pre_nms[2] += len(boxes)
+        if isinstance(cpgs, List) and isinstance(cpgs[0], torch.Tensor):
+            # print("doing lmap constraint")
+
+            labels = torch.ones((1, 1), dtype=cpgs[n].dtype, device=cpgs[n].device)
+            preds = torch.ones((1, 1), dtype=cpgs[n].dtype, device=cpgs[n].device)
+            rois = convert_boxes_to_pooler_format([boxes])
+            rois[:, 1:] = rois[:, 1:] / cpg_strides[n]
+            W, PL, NL = csc(
+                cpgs[n].unsqueeze(0).unsqueeze(0),
+                labels,
+                preds,
+                rois,
+                0.7,
+                False,
+                0.1,
+                0.2,
+                0.0,
+                True,
+                1.8,
+            )
+
+            # valid_mask = W.squeeze() >= 0
+            # print(W.shape, rois.shape, valid_mask.sum())
+
+            # boxes = boxes[valid_mask]
+            # scores_per_img = scores_per_img[valid_mask]
+            # lvl = lvl[valid_mask]
+
+            # print(scores_per_img.shape, W.shape)
+            # print(scores_per_img.shape, (W+1.0).shape)
+            scores_per_img = scores_per_img * (W.squeeze() + 1.0)
+
+
+            # cpg = cpgs[n] > 0.1
+            # cpg = torch.nonzero(cpg, as_tuple=False)
+            # # print(cpg)
+            # valid_masks = None
+            # for i in range(cpg.size(0)):
+                # y = cpg[i, 0] * cpg_strides[n]
+                # x = cpg[i, 1] * cpg_strides[n]
+                # # y = cpg[i, 0]
+                # # x = cpg[i, 1]
+
+                # valid_mask = (
+                    # (boxes.tensor[:, 0] < x)
+                    # & (boxes.tensor[:, 1] < y)
+                    # & (boxes.tensor[:, 2] > x)
+                    # & (boxes.tensor[:, 3] > y)
+                # )
+                # if valid_masks is not None:
+                    # valid_masks = valid_masks | valid_mask
+                # else:
+                    # valid_masks = valid_mask
+            # # print(torch.sum(valid_masks))
+
+            # if valid_masks is not None:
+                # boxes = boxes[valid_masks]
+                # scores_per_img = scores_per_img[valid_masks]
+                # lvl = lvl[valid_masks]
+
+        # print("find_top_rpn_proposals_group", len(boxes))
+
+        num_pre_nms[3] += len(boxes)
+
         keep = batched_nms(boxes.tensor, scores_per_img, lvl, nms_thresh)
         num_post_nms += keep.numel()
         # In Detectron1, there was different behavior during training vs. testing.
@@ -294,11 +330,13 @@ def find_top_rpn_proposals_group(
 
     if training:
         storage = get_event_storage()
-        storage.put_scalar("rpn/num_proposals_preprepre_nms", num_preprepre_nms / num_images)
-        storage.put_scalar("rpn/num_proposals_prepre_nms", num_prepre_nms / num_images)
-        storage.put_scalar("rpn/num_proposals_pre_nms", num_pre_nms / num_images)
+        storage.put_scalar("rpn/num_proposals_pre_nms_0", num_pre_nms[0] / num_images)
+        storage.put_scalar("rpn/num_proposals_pre_nms_1", num_pre_nms[1] / num_images)
+        storage.put_scalar("rpn/num_proposals_pre_nms_2", num_pre_nms[2] / num_images)
+        storage.put_scalar("rpn/num_proposals_pre_nms_3", num_pre_nms[3] / num_images)
         storage.put_scalar("rpn/num_proposals_post_nms", num_post_nms / num_images)
 
+    # print(results)
     return results
 
 

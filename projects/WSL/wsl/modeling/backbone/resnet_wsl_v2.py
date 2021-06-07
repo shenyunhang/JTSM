@@ -471,6 +471,7 @@ class ResNet(Backbone):
                 current_stride * np.prod([k.stride for k in blocks])
             )
             self._out_feature_channels[name] = curr_channels = blocks[-1].out_channels
+            self._size_divisibility = current_stride
         self.stage_names = tuple(self.stage_names)  # Make it static for scripting
 
         if num_classes is not None:
@@ -490,6 +491,10 @@ class ResNet(Backbone):
         children = [x[0] for x in self.named_children()]
         for out_feature in self._out_features:
             assert out_feature in children, "Available children: {}".format(", ".join(children))
+
+    @property
+    def size_divisibility(self):
+        return self._size_divisibility
 
     def forward(self, x):
         """

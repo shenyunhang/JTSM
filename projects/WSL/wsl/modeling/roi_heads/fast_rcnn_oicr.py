@@ -376,6 +376,7 @@ class OICROutputs(object):
         # means that the single example in minibatch (1) and each of the 100 examples
         # in minibatch (2) are given equal influence.
         loss_box_reg = loss_box_reg / self.gt_classes.numel()
+        # loss_box_reg = loss_box_reg / self.valid_weights.sum()
         return loss_box_reg
 
     def _predict_boxes(self):
@@ -708,7 +709,9 @@ class OICROutputLayers(nn.Module):
         )  # Nx(KxB)
         return predict_boxes.split(num_prop_per_image)
 
-    def predict_boxes_K(self, predictions, proposals):
+    def predict_boxes_K(
+        self, predictions: List[Tuple[torch.Tensor, torch.Tensor]], proposals: List[Instances]
+    ):
         """
         Args:
             predictions: return values of :meth:`forward()`.
@@ -732,11 +735,15 @@ class OICROutputLayers(nn.Module):
         proposal_boxes = [p.proposal_boxes for p in proposals]
         proposal_boxes = proposal_boxes[0].cat(proposal_boxes).tensor
         predict_boxes = self.box2box_transform.apply_deltas(
-            proposal_deltas, proposal_boxes
+            # ensure fp32 for decoding precision
+            proposal_deltas,
+            proposal_boxes,
         )  # Nx(KxB)
         return predict_boxes.split(num_prop_per_image)
 
-    def predict_probs(self, predictions, proposals):
+    def predict_probs(
+        self, predictions: Tuple[torch.Tensor, torch.Tensor], proposals: List[Instances]
+    ):
         """
         Args:
             predictions: return values of :meth:`forward()`.
@@ -753,7 +760,9 @@ class OICROutputLayers(nn.Module):
         probs = F.softmax(scores, dim=-1)
         return probs.split(num_inst_per_image, dim=0)
 
-    def predict_probs_K(self, predictions, proposals):
+    def predict_probs_K(
+        self, predictions: List[Tuple[torch.Tensor, torch.Tensor]], proposals: List[Instances]
+    ):
         """
         Args:
             predictions: return values of :meth:`forward()`.

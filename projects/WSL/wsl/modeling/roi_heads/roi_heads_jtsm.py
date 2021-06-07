@@ -27,8 +27,10 @@ from detectron2.utils.memory import retry_if_cuda_oom
 
 from wsl.modeling.poolers import ROIPooler
 from wsl.modeling.roi_heads.fast_rcnn_oicr import OICROutputLayers
-from wsl.modeling.roi_heads.fast_rcnn_jtsm import TSMOutputLayers
+from wsl.modeling.roi_heads.fast_rcnn_tsm import TSMOutputLayers
 from wsl.modeling.roi_heads.mask_head import (
+    MaskRCNNConvUpsampleWSLHead,
+    MaskRCNNUpsampleWSLHead,
     MaskRCNNWSLHead,
     mask_rcnn_co_loss,
     mask_rcnn_inference,
@@ -115,8 +117,14 @@ def binary_mask_to_polygon(binary_mask, tolerance=0):
 
 
 def rect_mask(shape, bbox):
+    # shape: h, w
+    # bbox: x1, y1, x2, y2
     mask = np.zeros(shape[:2], np.float32)
-    mask[bbox[1] : bbox[3], bbox[0] : bbox[2]] = 255
+    x1 = max(bbox[0], 0)
+    x2 = min(bbox[2], shape[1])
+    y1 = max(bbox[1], 0)
+    y2 = min(bbox[3], shape[0])
+    mask[y1 : y2, x1 : x2] = 255
     if len(shape) == 3 and shape[2] == 1:
         mask = np.expand_dims(mask, axis=-1)
     return mask
@@ -131,17 +139,21 @@ def do_grabcut(img, box):
     bgdModel = np.zeros((1, 65), np.float64)
     fgdModel = np.zeros((1, 65), np.float64)
 
-    width = box[2] - box[0] + 1
-    height = box[3] - box[1] + 1
+    x = max(0, box[0])
+    y = max(0, box[1])
+
+    width = min(box[2] - box[0], img.shape[1] - x)
+    height = min(box[3] - box[1], img.shape[0] - y)
     if width * height < _MIN_AREA:
-        assert width * height > 0
+        # assert width * height > 0
         img_mask = rect_mask(img.shape[:2], box)
     else:
         if width * height >= img.shape[0] * img.shape[1]:
             rect = (_RECT_SHRINK, _RECT_SHRINK, width - _RECT_SHRINK * 2, height - _RECT_SHRINK * 2)
         else:
-            rect = (box[0], box[1], width, height)
+            rect = (x, y, width, height)
 
+        # print(rect, img.shape, box)
         cv2.grabCut(img, mask, rect, bgdModel, fgdModel, grabcut_iter, cv2.GC_INIT_WITH_RECT)
 
         # img_mask = np.where((mask == 2) | (mask == 0), 0, 1).astype('uint8')
@@ -435,10 +447,10 @@ class JTSMROIHeads(ROIHeads):
         cfg.freeze()
 
         mask_refinery = []
-        for k in range(4):
-            # mask_refinery_k = build_mask_head(
+        for k in range(1):
+            # mask_refinery_k = MaskRCNNWSLHead(
             # mask_refinery_k = MaskRCNNUpsampleWSLHead(
-            mask_refinery_k = MaskRCNNWSLHead(
+            mask_refinery_k = build_mask_head(
                 cfg,
                 ShapeSpec(channels=in_channels, width=pooler_resolution, height=pooler_resolution),
             )
@@ -625,7 +637,7 @@ class JTSMROIHeads(ROIHeads):
             storage.put_scalar("proposals/objectness_logits+1 max", objectness_logits.max())
             storage.put_scalar("proposals/objectness_logits+1 min", objectness_logits.min())
 
-        torch.cuda.empty_cache()
+        # torch.cuda.empty_cache()
 
         box_features = self.box_head(box_features)
         predictions = self.box_predictor(box_features, proposals)
@@ -914,29 +926,32 @@ class JTSMROIHeads(ROIHeads):
         # return self.mask_head(features, instances)
         pred_mask_logits, pred_features = self.mask_head.layers(features)
 
-        torch.cuda.empty_cache()
+        # torch.cuda.empty_cache()
+
         if self.training:
             losses = {"loss_mask": mask_rcnn_loss(pred_mask_logits, instances, self.vis_period)}
-            losses["loss_mask_co"] = mask_rcnn_co_loss(pred_mask_logits, instances, self.vis_period)
+            # losses["loss_mask_co"] = mask_rcnn_co_loss(pred_mask_logits, instances, self.vis_period)
 
             for k in range(len(self.mask_refinery)):
                 suffix = "_r" + str(k)
                 instances = self.get_pgt_mask(pred_mask_logits, instances, suffix)
                 # losses_k = self.mask_refinery[k](features, instances)
                 # losses_k = self.mask_refinery[k](pred_features, instances)
-                pred_mask_logits = self.mask_refinery[k].layers(pred_features)
+                # pred_mask_logits = self.mask_refinery[k].layers(pred_features)
+                pred_mask_logits, pred_features = self.mask_refinery[k].layers(features)
                 losses["loss_mask" + suffix] = mask_rcnn_loss(
                     pred_mask_logits, instances, self.vis_period
                 )
-                losses["loss_mask_co" + suffix] = mask_rcnn_co_loss(
-                    pred_mask_logits, instances, self.vis_period
-                )
+                # losses["loss_mask_co" + suffix] = mask_rcnn_co_loss(
+                    # pred_mask_logits, instances, self.vis_period
+                # )
             return losses
         else:
             if True:
                 pred_mask_logits_all = None
                 for k in range(len(self.mask_refinery)):
-                    pred_mask_logits = self.mask_refinery[k].layers(pred_features)
+                    # pred_mask_logits = self.mask_refinery[k].layers(pred_features)
+                    pred_mask_logits, pred_features = self.mask_refinery[k].layers(features)
                     if pred_mask_logits_all is not None:
                         pred_mask_logits_all += pred_mask_logits
                     else:
@@ -1893,14 +1908,14 @@ class JTSMROIHeads(ROIHeads):
                 instance.no_paste = (instance_classes_int[:] >= 0).to(dtype=torch.bool)
 
         time_end = time.time()
-        if True:
+        if False:
             print(
                 "Grabcut takes ",
                 time_end - time_start,
                 " seconds for ",
                 cnt,
                 " boxes with image size ",
-                img.shape,
+                [img.shape for img in imgs],
             )
 
         return instances
@@ -1975,8 +1990,7 @@ class JTSMROIHeads(ROIHeads):
                 instances_i.no_paste = (instance_classes_int[:] >= 0).to(dtype=torch.bool)
 
         time_end = time.time()
-        if True:
-            print("Object evidence takes ", time_end - time_start, " seconds for ", cnt, " boxes.")
+        # print("Object evidence takes ", time_end - time_start, " seconds for ", cnt, " boxes.")
         return instances
 
     @torch.no_grad()
@@ -2033,25 +2047,29 @@ class JTSMROIHeads(ROIHeads):
         pgt_masks = [target.pgt_masks for target in targets]
         # pgt_boxes = [target.gt_boxes for target in targets]
         pgt_classes = [target.gt_classes for target in targets]
-        # pgt_scores = [target.gt_scores for target in targets]
+        pgt_scores = [target.gt_scores for target in targets]
         oh_labels = [target.oh_labels for target in targets]
 
-        # get mask from superpixel
-        device = self.images.tensor.device
-        dtype = self.images.tensor.dtype
+        device = self.gt_classes_img_int_stuff[0].device
+        dtype = self.gt_classes_img_int_stuff[0].dtype
         _, _, img_h, img_w = self.images.tensor.shape
 
         pgt_sem_seg = torch.zeros(
-            len(self.proposals), self.num_classes_stuff, img_h, img_w, device=device, dtype=dtype
+            len(self.proposals), img_h, img_w, device=device, dtype=dtype
         )
 
-        for i, (pgt_masks_i, pgt_classes_i) in enumerate(zip(pgt_masks, pgt_classes)):
-            for j in range(pgt_masks_i.size(0)):
-                pgt_sem_seg[i, pgt_classes_i[j] - self.num_classes, ...] += pgt_masks_i[j, ...]
-        pgt_sem_seg = torch.argmax(pgt_sem_seg, dim=1)
-        pgt_sem_seg[pgt_sem_seg == 0] = 255
+        for i, (pgt_masks_i, pgt_classes_i, pgt_scores_i) in enumerate(zip(pgt_masks, pgt_classes, pgt_scores)):
+            for j in torch.argsort(pgt_scores_i, descending=False):
+                pgt_sem_seg[i][pgt_masks_i[j, ...]] = pgt_classes_i[j] - self.num_classes + 1
+            # print([gt for gt in self.gt_classes_img_int_stuff], [gt for gt in pgt_classes], [torch.unique(t, sorted=True) for t in pgt_sem_seg])
+            for j in range(pgt_classes_i.size(0)):
+                if pgt_classes_i[j] - self.num_classes + 1 not in pgt_sem_seg[i]:
+                    pgt_sem_seg[i][pgt_masks_i[j, ...]] = pgt_classes_i[j] - self.num_classes + 1
+            # print([gt for gt in self.gt_classes_img_int_stuff], [gt for gt in pgt_classes], [torch.unique(t, sorted=True) for t in pgt_sem_seg])
+        # pgt_sem_seg[pgt_sem_seg == 0] = 255
         return pgt_sem_seg
 
+        # get mask from superpixel
         for i, (oh_labels_i, pgt_classes_i, proposals_i, superpixels_i) in enumerate(
             zip(oh_labels, pgt_classes, self.proposals, self.superpixels.tensor)
         ):

@@ -263,11 +263,22 @@ class ROIPooler(nn.Module):
 
         pooler_fmt_boxes = convert_boxes_to_pooler_format(box_lists)
 
+        if superpixels is not None:
+            dtype, device = x[0].dtype, x[0].device
+            max_len_oh_labels = max([l.size(1) for l in oh_labels_list])
+            pooler_fmt_labels_list = [
+                torch.zeros(l.size(0), max_len_oh_labels, dtype = torch.int, device=device)
+                for l in oh_labels_list
+            ]
+            for fl, l in zip(pooler_fmt_labels_list, oh_labels_list):
+                fl[:, : l.size(1)] = l[:, :]
+            pooler_fmt_labels = cat([fl for fl in pooler_fmt_labels_list])
+
         if num_level_assignments == 1:
 
             if superpixels is not None:
                 return self.level_poolers[0](
-                    x[0], pooler_fmt_boxes, oh_labels_list[0], superpixels.tensor
+                    x[0], pooler_fmt_boxes, pooler_fmt_labels, superpixels.tensor
                 )
 
             return self.level_poolers[0](x[0], pooler_fmt_boxes)
@@ -298,16 +309,6 @@ class ROIPooler(nn.Module):
             )
 
         if superpixels is not None:
-
-            max_len_oh_labels = max([l.size(1) for l in oh_labels_list])
-            pooler_fmt_labels_list = [
-                torch.zeros(l.size(0), max_len_oh_labels, dtype - torch.int, device=device)
-                for l in oh_labels_list
-            ]
-            for fl, l in zip(pooler_fmt_labels_list, oh_labels_list):
-                fl[:, : l.size(1)] = l[:, :]
-            pooler_fmt_labels = cat([l for l in pooler_fmt_labels_list])
-
             for level, pooler in enumerate(self.level_poolers):
                 inds = nonzero_tuple(level_assignments == level)[0]
                 pooler_fmt_boxes_level = pooler_fmt_boxes[inds]

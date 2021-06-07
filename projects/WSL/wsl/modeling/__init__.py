@@ -14,8 +14,6 @@ from .roi_heads import WSDDNROIHeads, CSCROIHeads, OICRROIHeads, PCLROIHeads
 
 from .seg_heads import WSJDSROIHeads, TwoClassHead
 
-from .cls_heads import TwoLayerMLP
-
 from .proposal_generator import RPNWSL
 
 # from .anchor_generator import WSLAnchorGenerator
