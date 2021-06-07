@@ -3,11 +3,12 @@ _BASE_: "Base-RCNN-DilatedC5.yaml"
 #_BASE_: "Base-RCNN-DilatedC5_VOC2012_Ins.yaml"
 MODEL:
   WEIGHTS: "models/DRN-WSOD/resnet18_ws_model_120_d2.pkl"
-  #WEIGHTS: "models/DRN-WSOD/resnet18_wsl_119_iter.pth"
+  #WEIGHTS: "models/DRN-WSOD/resnet18_ws_119_iter.pth"
   PIXEL_MEAN: [102.9801, 115.9465, 122.7717]
   MASK_ON: False
   LOAD_PROPOSALS: True
   BACKBONE:
+    #NAME: "build_wsl_resnet_backbone"
     NAME: "build_wsl_resnet_v2_backbone"
     FREEZE_AT: 5
   RESNETS:
@@ -41,8 +42,8 @@ SOLVER:
   STEPS: (35000, 50000)
   MAX_ITER: 50000  # 40.0 epochs for 07
   WARMUP_ITERS: 0
-  IMS_PER_BATCH: 16
-  BASE_LR: 0.04
+  IMS_PER_BATCH: 4
+  BASE_LR: 0.01
   WEIGHT_DECAY: 0.0005
   BIAS_LR_FACTOR: 2.0
   WEIGHT_DECAY_BIAS: 0.0
