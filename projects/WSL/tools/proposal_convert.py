@@ -166,8 +166,8 @@ def convert_mcg_seg_i(dataset_dict, dataset_name, dir_in, dir_out):
         boxes_i[j, 2] = x2
         boxes_i[j, 3] = y2
 
-    # if False:
-    if True:
+    # if True:
+    if False:
         index = dataset_dict["image_id"]
         home = str(Path.home())
         # for j in tqdm(range(num_proposals), position=1):
