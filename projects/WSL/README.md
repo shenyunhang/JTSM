@@ -64,6 +64,7 @@ python3 projects/WSL/tools/prepare_panoptic_fpn_voc2012_and_sbd.py
 
 Download MCG segmentation proposal from [here](https://www2.eecs.berkeley.edu/Research/Projects/CS/vision/grouping/mcg/) to detectron/datasets/data, and transform it to pickle serialization format:
 
+#### PASCAL VOC 2012:
 ```
 cd datasets/proposals
 tar xvzf MCG-Pascal-Segmentation_trainvaltest_2012-proposals.tgz
@@ -73,6 +74,17 @@ python3 projects/WSL/tools/proposal_convert.py voc_2012_val_instance datasets/pr
 python3 projects/WSL/tools/proposal_convert.py voc_2012_train_instance datasets/proposals/MCG-Pascal-Segmentation_trainvaltest_2012-proposals datasets/proposals/mcg_voc_2012_train_instance_segmentation_d2
 python3 projects/WSL/tools/proposal_convert.py sbd_9118_instance datasets/proposals/MCG-SBD-trainval-proposals/ datasets/proposals/mcg_sbd_9118_instance_segmentation_d2
 ```
+
+#### COCO:
+```
+cd datasets/proposals
+tar xvzf MCG-COCO-train2014-proposals.tgz
+tar xvzf MCG-COCO-val2014-proposals.tgz
+cd ../../
+python3 projects/WSL/tools/proposal_convert.py coco_2014_train datasets/proposals/MCG-COCO-train2014-proposals datasets/proposals/mcg_coco_instance_segmentation_d2
+python3 projects/WSL/tools/proposal_convert.py coco_2014_val datasets/proposals/MCG-COCO-val2014-proposals datasets/proposals/mcg_coco_instance_segmentation_d2
+```
+
 Noted that above proposal conversion will take some time, which depends on the CPU performance.
 
 
