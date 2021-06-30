@@ -58,6 +58,7 @@ benchmark_RELEASE/dataset/ SBD
 
 Convert VOC 2012 and SBD to our format:
 ```
+python3 projects/WSL/tools/convert_voc2012_and_sbd_instance.py
 python3 projects/WSL/tools/convert_voc2012_and_sbd_panoptic.py
 python3 projects/WSL/tools/prepare_panoptic_fpn_voc2012_and_sbd.py
 ```
