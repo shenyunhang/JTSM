@@ -18,13 +18,15 @@ We borrowed code from [Detectron2](https://github.com/facebookresearch/detectron
 If you find JTSM useful in your research, please consider citing:
 
 ```
-@inproceedings{JTSM_2021_CVPR,
+@InProceedings{JTSM_2021_CVPR,
 	author = {Shen, Yunhang and Cao, Liujuan and Chen, Zhiwei and Lian, Feihong and Zhang, Baochang and Su, Chi and Wu, Yongjian and Huang, Feiyue and Ji, Rongrong},
 	title = {Toward Joint Thing-and-Stuff Mining for Weakly Supervised Panoptic Segmentation},
-	booktitle = {The IEEE Conference on Computer Vision and Pattern Recognition (CVPR)},
+	booktitle = {Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR)},
 	year = {2021},
+	pages = {16694-16705}
 }   
 ```
+
 
 ## Installation
 
@@ -45,13 +47,16 @@ python3 -m pip install -e .
 cd ../../
 ```
 
+
 ## Dataset Preparation
-Please follow [this](https://github.com/shenyunhang/JTSM/blob/jtsm/datasets/README.md#expected-dataset-structure-for-pascal-voc) to creating symlinks for PASCAL VOC 2012.
+
+#### PASCAL VOC 2012:
+Please follow [this](https://github.com/shenyunhang/JTSM/blob/JTSM/datasets/README.md#expected-dataset-structure-for-pascal-voc) to creating symlinks for PASCAL VOC.
 
 Also download SBD data:
 ```
 cd datasets/
-wegt http://www.eecs.berkeley.edu/Research/Projects/CS/vision/grouping/semantic_contours/benchmark.tgz
+wget --no-check-certificate http://www.eecs.berkeley.edu/Research/Projects/CS/vision/grouping/semantic_contours/benchmark.tgz
 tar xvzf benchmark.tgz
 benchmark_RELEASE/dataset/ SBD
 ```
@@ -64,19 +69,22 @@ python3 projects/WSL/tools/prepare_panoptic_fpn_voc2012_and_sbd.py
 ```
 
 Download MCG segmentation proposal from [here](https://www2.eecs.berkeley.edu/Research/Projects/CS/vision/grouping/mcg/) to detectron/datasets/data, and transform it to pickle serialization format:
-
-#### PASCAL VOC 2012:
 ```
 cd datasets/proposals
 tar xvzf MCG-Pascal-Segmentation_trainvaltest_2012-proposals.tgz
 tar xvzf MCG-SBD-trainval-proposals.tgz
 cd ../../
-python3 projects/WSL/tools/proposal_convert.py voc_2012_val_instance datasets/proposals/MCG-Pascal-Segmentation_trainvaltest_2012-proposals datasets/proposals/mcg_voc_2012_val_instance_segmentation_d2
 python3 projects/WSL/tools/proposal_convert.py voc_2012_train_instance datasets/proposals/MCG-Pascal-Segmentation_trainvaltest_2012-proposals datasets/proposals/mcg_voc_2012_train_instance_segmentation_d2
+python3 projects/WSL/tools/proposal_convert.py voc_2012_val_instance datasets/proposals/MCG-Pascal-Segmentation_trainvaltest_2012-proposals datasets/proposals/mcg_voc_2012_val_instance_segmentation_d2
 python3 projects/WSL/tools/proposal_convert.py sbd_9118_instance datasets/proposals/MCG-SBD-trainval-proposals/ datasets/proposals/mcg_sbd_9118_instance_segmentation_d2
 ```
 
 #### COCO:
+Please follow [this](https://github.com/shenyunhang/JTSM/blob/JTSM/datasets/README.md#expected-dataset-structure-for-coco-instancekeypoint-detection) to creating symlinks for MS COCO.
+
+Please follow [this](https://github.com/facebookresearch/Detectron/blob/main/detectron/datasets/data/README.md#coco-minival-annotations) to download `minival` and `valminusminival` annotations.
+
+Download MCG segmentation proposal from [here](https://www2.eecs.berkeley.edu/Research/Projects/CS/vision/grouping/mcg/) to detectron/datasets/data, and transform it to pickle serialization format:
 ```
 cd datasets/proposals
 tar xvzf MCG-COCO-train2014-proposals.tgz
