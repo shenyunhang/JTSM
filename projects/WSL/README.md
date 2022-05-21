@@ -68,7 +68,7 @@ python3 projects/WSL/tools/convert_voc2012_and_sbd_panoptic.py
 python3 projects/WSL/tools/prepare_panoptic_fpn_voc2012_and_sbd.py
 ```
 
-Download MCG segmentation proposal from [here](https://www2.eecs.berkeley.edu/Research/Projects/CS/vision/grouping/mcg/) to detectron/datasets/data, and transform it to pickle serialization format:
+Download MCG segmentation proposal from [here](https://www2.eecs.berkeley.edu/Research/Projects/CS/vision/grouping/mcg/) to datasets/proposals, and transform it to pickle serialization format:
 ```
 cd datasets/proposals
 tar xvzf MCG-Pascal-Segmentation_trainvaltest_2012-proposals.tgz
@@ -84,7 +84,7 @@ Please follow [this](https://github.com/shenyunhang/JTSM/blob/JTSM/datasets/READ
 
 Please follow [this](https://github.com/facebookresearch/Detectron/blob/main/detectron/datasets/data/README.md#coco-minival-annotations) to download `minival` and `valminusminival` annotations.
 
-Download MCG segmentation proposal from [here](https://www2.eecs.berkeley.edu/Research/Projects/CS/vision/grouping/mcg/) to detectron/datasets/data, and transform it to pickle serialization format:
+Download MCG segmentation proposal from [here](https://www2.eecs.berkeley.edu/Research/Projects/CS/vision/grouping/mcg/) to datasets/proposals, and transform it to pickle serialization format:
 ```
 cd datasets/proposals
 tar xvzf MCG-COCO-train2014-proposals.tgz
@@ -107,12 +107,16 @@ mv models JTSM/
 Then we have the following directory structure:
 ```
 JTSM
-|_ models
-|  |_ DRN-WSOD
-|     |_ resnet18_ws_model_120.pkl
-|     |_ resnet150_ws_model_120.pkl
-|     |_ resnet101_ws_model_120.pkl
-|_ ...
+├── models
+│   ├── DRN-WSOD
+│   │   ├── resnet101_ws_model_120_d2.pkl
+│   │   ├── resnet101_ws_model_120.pkl
+│   │   ├── resnet18_ws_model_120_d2.pkl
+│   │   ├── resnet18_ws_model_120.pkl
+│   │   ├── resnet50_ws_model_120_d2.pkl
+│   │   ├── resnet50_ws_model_120.pkl
+│   │   ├── densenet121_ws_model_120.pkl
+├── ...
 ```
 
 
@@ -122,19 +126,19 @@ JTSM
 
 #### ResNet18-WS
 ```
-python3.8 projects/WSL/tools/train_net.py --dist-url "tcp://127.0.0.1:52044" --num-gpus 4 --config-file projects/WSL/configs/PascalVOC-PanopticSegmentation/jtsm_WSR_18_DC5_1x.yaml OUTPUT_DIR output/jtsm_WSR_18_DC5_voc2012_sbd_`date +'%Y-%m-%d_%H-%M-%S'`
+python3.8 projects/WSL/tools/train_net.py --dist-url "tcp://127.0.0.1:52044" --num-gpus 4 --config-file projects/WSL/configs/PascalVOC-PanopticSegmentation/jtsm_WSR_18_DC5_1x.yaml OUTPUT_DIR output/jtsm_WSR_18_DC5_voc2012_sbd_`date +'%Y%m%d_%H%M%S'`
 ```
 
 #### ResNet50-WS
 ```
-python3.8 projects/WSL/tools/train_net.py --dist-url "tcp://127.0.0.1:52044" --num-gpus 4 --config-file projects/WSL/configs/PascalVOC-PanopticSegmentation/jtsm_WSR_50_DC5_1x.yaml OUTPUT_DIR output/jtsm_WSR_50_DC5_voc2012_sbd_`date +'%Y-%m-%d_%H-%M-%S'`
+python3.8 projects/WSL/tools/train_net.py --dist-url "tcp://127.0.0.1:52044" --num-gpus 4 --config-file projects/WSL/configs/PascalVOC-PanopticSegmentation/jtsm_WSR_50_DC5_1x.yaml OUTPUT_DIR output/jtsm_WSR_50_DC5_voc2012_sbd_`date +'%Y%m%d_%H%M%S'`
 ```
 
 ### MS COCO Panoptic
 
 #### ResNet18-WS
 ```
-python3.8 projects/WSL/tools/train_net.py --dist-url "tcp://127.0.0.1:52044" --num-gpus 4 --config-file projects/WSL/configs/COCO-PanopticSegmentation/jtsm_WSR_18_DC5_1x.yaml OUTPUT_DIR output/jtsm_WSR_18_DC5_voc2012_sbd_`date +'%Y-%m-%d_%H-%M-%S'`
+python3.8 projects/WSL/tools/train_net.py --dist-url "tcp://127.0.0.1:52044" --num-gpus 4 --config-file projects/WSL/configs/COCO-PanopticSegmentation/jtsm_WSR_18_DC5_1x.yaml OUTPUT_DIR output/jtsm_WSR_18_DC5_voc2012_sbd_`date +'%Y%m%d_%H%M%S'`
 ```
 
 We can also run JTSM on deeper backbone, e.g., ResNet50-WS and ResNet101-WS, by modifying the configures for ResNet18-WS backbone.
@@ -143,5 +147,5 @@ We can also run JTSM on deeper backbone, e.g., ResNet50-WS and ResNet101-WS, by 
 
 #### ResNet18-WS
 ```
-python3.8 projects/WSL/tools/train_net.py --dist-url "tcp://127.0.0.1:52044" --num-gpus 4 --config-file projects/WSL/configs/PascalVOC-PanopticSegmentation/jtsm_WSR_18_DC5_1x_VOC2007.yaml OUTPUT_DIR output/jtsm_WSR_18_DC5_voc2007_`date +'%Y-%m-%d_%H-%M-%S'`
+python3.8 projects/WSL/tools/train_net.py --dist-url "tcp://127.0.0.1:52044" --num-gpus 4 --config-file projects/WSL/configs/PascalVOC-PanopticSegmentation/jtsm_WSR_18_DC5_1x_VOC2007.yaml OUTPUT_DIR output/jtsm_WSR_18_DC5_voc2007_`date +'%Y%m%d_%H%M%S'`
 ```
